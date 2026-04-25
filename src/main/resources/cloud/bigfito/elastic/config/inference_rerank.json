@@ -1,5 +1,4 @@
 {
-  "task_type": "rerank",
   "service": "elasticsearch",
   "service_settings": {
     "num_allocations": 2,

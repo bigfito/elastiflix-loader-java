@@ -1,5 +1,4 @@
 {
-  "task_type": "sparse_embedding",
   "service": "elasticsearch",
   "service_settings": {
     "num_threads": 4,

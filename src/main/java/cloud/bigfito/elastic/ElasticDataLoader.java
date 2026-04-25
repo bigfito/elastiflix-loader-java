@@ -1,19 +1,23 @@
 package cloud.bigfito.elastic;
 
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.cluster.HealthResponse;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
+import co.elastic.clients.elasticsearch.inference.PutRequest;
+import co.elastic.clients.elasticsearch.inference.TaskType;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.json.JsonData;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.ElasticsearchTransport;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
+import org.elasticsearch.client.ResponseException;
 
+import org.apache.http.Header;
 import org.apache.http.HttpHost;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.message.BasicHeader;
 import org.apache.http.ssl.SSLContextBuilder;
 import org.elasticsearch.client.RestClient;
 
@@ -28,22 +32,13 @@ public class ElasticDataLoader {
 
     public static void main(String[] args) throws Exception {
 
-        // -----------------------------------------------------------
-        // STEP 1: Credentials for the "elastic" super-user.
-        // Replace "your-password-here" with the password shown in
-        // your Elasticsearch terminal when you first started it.
-        // -----------------------------------------------------------
-        final String username = "elastic";
-        final String password = "<PASSWORD_HERE>";
+        String serverUrl = "https://bigfito-serverless-search-a43f10.es.us-central1.gcp.elastic.cloud";
+        String apiKey = "TnNRdXhwMEI3X2dZMnRSdWVKV3g6dG5PaWVaZ1dJOExZS2IybXZwYnZwZw==";
 
-        BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-        credentialsProvider.setCredentials(
-                AuthScope.ANY,
-                new UsernamePasswordCredentials(username, password)
-        );
+        System.out.println("Connecting to Elasticsearch at " + serverUrl);
 
         // -----------------------------------------------------------
-        // STEP 2: An SSL context that trusts ANY certificate.
+        // STEP 1: An SSL context that trusts ANY certificate.
         // This is fine for a local dev machine, but NEVER do this
         // in production. In production you should import the real
         // CA certificate that Elasticsearch generated for you.
@@ -53,44 +48,35 @@ public class ElasticDataLoader {
                 .build();
 
         // -----------------------------------------------------------
-        // STEP 3: Build the low-level REST client. This is the
+        // STEP 2: Build the low-level REST client. This is the
         // actual HTTP client that talks to Elasticsearch.
         // -----------------------------------------------------------
         RestClient restClient = RestClient
-                .builder(new HttpHost("localhost", 9200, "https"))
+                .builder(HttpHost.create(serverUrl))
+                .setDefaultHeaders(new Header[]{
+                        new BasicHeader("Authorization", "ApiKey " + apiKey)
+                })
                 .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder
-                        .setDefaultCredentialsProvider(credentialsProvider)
                         .setSSLContext(sslContext)
                         .setSSLHostnameVerifier((hostname, session) -> true))
+                .setRequestConfigCallback(requestConfigBuilder -> requestConfigBuilder
+                        .setConnectTimeout(5000)
+                        .setSocketTimeout(300000)) // 5 minutes
                 .build();
 
         // -----------------------------------------------------------
-        // STEP 4: Wrap the REST client in a "transport" that knows
+        // STEP 3: Wrap the REST client in a "transport" that knows
         // how to serialize/deserialize JSON, then create the
         // high-level ElasticsearchClient.
-        //
-        // We use try-with-resources so the resources are closed
-        // automatically, even if an exception is thrown.
         // -----------------------------------------------------------
         try (ElasticsearchTransport transport =
                      new RestClientTransport(restClient, new JacksonJsonpMapper())) {
 
             ElasticsearchClient client = new ElasticsearchClient(transport);
 
-            // -------------------------------------------------------
-            // STEP 5: Ask the cluster for its health. The response
-            // includes how many nodes the cluster has.
-            // -------------------------------------------------------
-            HealthResponse health = client.cluster().health();
-
-            int numberOfNodes = health.numberOfNodes();
-            String clusterName = health.clusterName();
-
-            System.out.println("Cluster name:     " + clusterName);
-            System.out.println("Number of nodes:  " + numberOfNodes);
-
             createIndex(client);
             ingestData(client);
+            createInferenceEndpoints(client);
         }
     }
 
@@ -176,5 +162,52 @@ public class ElasticDataLoader {
         }
 
         System.out.println("Index " + indexName + " created successfully.");
+    }
+
+    private static void createInferenceEndpoints(ElasticsearchClient client) throws Exception {
+        String[] endpointIds = {"elastiflix-e5", "elastiflix-elser", "elastiflix-rerank"};
+        TaskType[] taskTypes = {TaskType.TextEmbedding, TaskType.SparseEmbedding, TaskType.Rerank};
+        String[] configFiles = {
+                "/cloud/bigfito/elastic/config/inference_e5.json",
+                "/cloud/bigfito/elastic/config/inference_elser.json",
+                "/cloud/bigfito/elastic/config/inference_rerank.json"
+        };
+
+        for (int i = 0; i < endpointIds.length; i++) {
+            String endpointId = endpointIds[i];
+            TaskType taskType = taskTypes[i];
+            String configFile = configFiles[i];
+
+            System.out.println("Creating inference endpoint " + endpointId + " (" + taskType + ")...");
+
+            try {
+                client.inference().get(g -> g.inferenceId(endpointId).taskType(taskType));
+                System.out.println("Inference endpoint " + endpointId + " already exists.");
+                continue;
+            } catch (ElasticsearchException e) {
+                if (e.status() != 404) {
+                    throw e;
+                }
+            }
+
+            try (InputStream configStream = ElasticDataLoader.class.getResourceAsStream(configFile)) {
+                if (configStream == null) {
+                    throw new RuntimeException("Could not find " + configFile);
+                }
+
+                client.inference().put(PutRequest.of(p -> p
+                        .inferenceId(endpointId)
+                        .taskType(taskType)
+                        .withJson(configStream)
+                ));
+            } catch (ResponseException e) {
+                if (e.getResponse().getStatusLine().getStatusCode() == 408) {
+                    System.out.println("Warning: Timeout while creating inference endpoint " + endpointId + ". The model might still be deploying. Check Elasticsearch logs or stats.");
+                } else {
+                    throw e;
+                }
+            }
+            System.out.println("Inference endpoint " + endpointId + " created successfully.");
+        }
     }
 }
