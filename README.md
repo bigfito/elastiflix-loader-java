@@ -1,177 +1,97 @@
-| Endpoint ID | Type | Required for |
-|-------------|------|-------------|
-| `elser` | `sparse_embedding` | Semantic (ELSER), Hybrid |
-| `e5` | `text_embedding` | Semantic (E5) |
+# Elastiflix Loader — Java
 
-Create them in Kibana Dev Tools:
+A command-line data loader that bulk-ingests a ~30 K movie dataset into an Elasticsearch cluster and creates the `elastiflix-movies` index with semantic search capabilities powered by ELSER and multilingual-E5 embeddings.
 
-```http
-PUT _inference/sparse_embedding/elser
-{
-  "service": "elasticsearch",
-  "service_settings": {
-    "model_id": ".elser-model-2",
-    "num_allocations": 1,
-    "num_threads": 1
-  }
-}
-```
+## Prerequisites
 
-```http
-PUT _inference/text_embedding/e5
-{
-  "service": "elasticsearch",
-  "service_settings": {
-    "model_id": ".multilingual-e5-small",
-    "num_allocations": 1,
-    "num_threads": 1
-  }
-}
-```
+| Requirement | Version |
+|---|---|
+| Java | 21+ |
+| Maven | 3.8+ |
+| Elasticsearch | 9.x (local cluster at `https://localhost:9200`) |
 
-BM25 mode works without any inference endpoints.
-
----
+The loader is designed to run against the 4-node Docker Compose cluster defined in the sibling `../docker-compose/` directory. Start that cluster first.
 
 ## Configuration
 
-Edit `src/main/resources/application.yml`:
+Before running, open `ElasticDataLoader.java` and update the credentials to match your cluster:
 
-```yaml
-elasticsearch:
-  host: https://localhost:9200
-  api-key: <your-api-key>
-  index: elastiflix-movies
-  ssl-verify: false        # set to true in production with a valid certificate
-
-app:
-  page-size: 50
-  tmdb-image-base: https://image.tmdb.org/t/p/w500
+```java
+final String username = "elastic";
+final String password = "your-password-here"; // line 37
 ```
 
-| Property | Description |
-|----------|-------------|
-| `elasticsearch.host` | Full URL including scheme and port |
-| `elasticsearch.api-key` | Base64-encoded API key from Kibana → Stack Management → API Keys |
-| `elasticsearch.ssl-verify` | Set `false` for self-signed certs (local dev only) |
-| `app.page-size` | Number of results per page |
+The password must match the `ELASTIC_PASSWORD` set in `../docker-compose/.env`.
 
----
+> **Note:** The SSL context trusts all certificates and disables hostname verification. This is intentional for the local dev cluster — do not use this configuration in production.
 
-## Running the Application
+## Running
 
 ```bash
-./mvnw spring-boot:run
+mvn exec:java
 ```
 
-Then open [http://localhost:8080](http://localhost:8080).
+On first run the loader will:
+1. Verify cluster health and print the cluster name and node count.
+2. Create the `elastiflix-movies` index (skipped if it already exists).
+3. Stream and bulk-ingest all movies in batches of 500, printing progress every batch.
 
-To build a self-contained JAR:
-
-```bash
-./mvnw clean package
-java -jar target/elastiflix-java-0.0.1-SNAPSHOT.jar
+Expected output:
+```
+Cluster name:     my-cluster
+Number of nodes:  4
+Creating index elastiflix-movies...
+Index elastiflix-movies created successfully.
+Ingesting data into elastiflix-movies...
+Indexed 500 movies...
+Indexed 1000 movies...
+...
+Successfully indexed 30361 movies.
 ```
 
----
+## Index Schema
+
+The `elastiflix-movies` index is defined in `src/main/resources/cloud/bigfito/elastic/config/schema.json` and includes:
+
+- **Standard fields:** `title`, `overview`, `cast`, `genres`, `release_date`, `budget`, `revenue`, `popularity`, `vote_average`, `vote_count`, and more.
+- **Semantic text fields** (AI-powered):
+  - `plot_elser` — sparse embeddings via the ELSER model (best for English keyword-style queries)
+  - `plot_e5` — dense embeddings via `multilingual-e5-small` (best for multilingual semantic queries)
+  - Both are populated automatically from the `plot` field via `copy_to`.
+
+Inference endpoint configurations used to create the ML models are in:
+
+```
+src/main/resources/cloud/bigfito/elastic/config/
+├── inference_e5.json       # text_embedding — multilingual-e5-small, adaptive 1–32 allocations
+├── inference_elser.json    # sparse_embedding — elser_model_2, adaptive 2–32 allocations
+└── inference_rerank.json   # rerank — rerank-v1, 2 allocations
+```
+
+## Dataset
+
+The movie dataset (`movies.zip`, ~29 MB) is bundled inside the project and unzipped at runtime from the classpath. It contains JSON objects with fields matching the index schema above.
 
 ## Project Structure
 
 ```
-src/main/java/com/elastiflix/
+src/main/java/cloud/bigfito/elastic/
+└── ElasticDataLoader.java          # Single entry point — all loader logic
+
+src/main/resources/cloud/bigfito/elastic/
 ├── config/
-│   ├── AppProperties.java          # Binds application.yml properties
-│   └── ElasticsearchConfig.java    # ElasticsearchClient bean (API key + optional trust-all SSL)
-├── controller/
-│   ├── api/
-│   │   └── MovieApiController.java # REST endpoints (JSON)
-│   └── web/
-│       ├── HomeController.java     # GET /
-│       ├── SearchController.java   # GET /search
-│       └── MovieDetailController.java # GET /movie/{id}
-├── exception/
-│   └── GlobalExceptionHandler.java
-├── model/
-│   ├── Movie.java                  # Document model
-│   ├── SearchMode.java             # Enum: BM25, ELSER, E5, HYBRID
-│   └── SearchResponse.java         # Pagination wrapper
-├── repository/
-│   └── MovieRepository.java        # All four Elasticsearch query strategies
-└── service/
-    └── MovieService.java
-
-src/main/resources/
-├── application.yml
-└── templates/
-    ├── index.html                  # Landing page
-    ├── search.html                 # Search results + pagination
-    ├── movie-detail.html           # Movie detail page
-    ├── error.html
-    └── fragments/
-        ├── layout.html             # Base Thymeleaf layout
-        └── movie-card.html         # Reusable movie card component
+│   ├── schema.json                 # Elasticsearch index mappings
+│   ├── inference_e5.json
+│   ├── inference_elser.json
+│   └── inference_rerank.json
+└── movies/
+    └── movies.zip                  # Bundled dataset (~30K movies)
 ```
 
----
+## Dependencies
 
-## Search Implementation
-
-### BM25
-Uses the Elasticsearch Java client fluent builder with a `multi_match` query:
-```java
-esClient.search(s -> s
-    .index(index).from(from).size(size)
-    .query(q -> q.multiMatch(mm -> mm
-        .query(queryText)
-        .fields(List.of("title^3", "original_title^2", "overview", "plot")))),
-    Movie.class);
-```
-
-### Semantic (ELSER / E5)
-Uses `withJson()` to send a raw `semantic` query (ES 8.8+):
-```json
-{
-  "query": {
-    "semantic": {
-      "field": "plot_elser",
-      "query": "<user query>"
-    }
-  }
-}
-```
-
-### Hybrid (BM25 + ELSER)
-Uses the ES 8.14+ `retriever.rrf` API via `withJson()`:
-```json
-{
-  "retriever": {
-    "rrf": {
-      "retrievers": [
-        { "standard": { "query": { "multi_match": { ... } } } },
-        { "standard": { "query": { "semantic": { "field": "plot_elser", ... } } } }
-      ],
-      "rank_window_size": 100,
-      "rank_constant": 60
-    }
-  }
-}
-```
-
----
-
-## Index Mapping
-
-The `elastiflix-movies` index uses `semantic_text` fields that are populated automatically by Elasticsearch at ingest time:
-
-| Field | Type | Used by |
-|-------|------|---------|
-| `title`, `original_title` | `text` | BM25 |
-| `overview`, `plot` | `text` | BM25 |
-| `plot_elser` | `semantic_text` (ELSER) | Semantic ELSER, Hybrid |
-| `plot_e5` | `semantic_text` (E5) | Semantic E5 |
-
----
-
-## Related
-
-- **[elastiflix-loader-java](../elastiflix-loader-java)** — data loader that creates the index and bulk-ingests the movie dataset
+| Library | Version |
+|---|---|
+| `co.elastic.clients:elasticsearch-java` | 9.3.3 |
+| `org.elasticsearch.client:elasticsearch-rest-client` | 9.3.3 |
+| `org.slf4j:slf4j-simple` | 1.7.36 |
