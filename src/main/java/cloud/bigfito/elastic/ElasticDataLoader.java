@@ -32,8 +32,8 @@ public class ElasticDataLoader {
 
     public static void main(String[] args) throws Exception {
 
-        String serverUrl = "https://bigfito-serverless-search-a43f10.es.us-central1.gcp.elastic.cloud";
-        String apiKey = "TnNRdXhwMEI3X2dZMnRSdWVKV3g6dG5PaWVaZ1dJOExZS2IybXZwYnZwZw==";
+        String serverUrl = System.getenv("ELASTIC_ENDPOINT");
+        String apiKey = System.getenv("APIKEY");
 
         System.out.println("Connecting to Elasticsearch at " + serverUrl);
 
@@ -75,8 +75,8 @@ public class ElasticDataLoader {
             ElasticsearchClient client = new ElasticsearchClient(transport);
 
             createIndex(client);
-            ingestData(client);
-            createInferenceEndpoints(client);
+            //ingestData(client);
+            //createInferenceEndpoints(client);
         }
     }
 
