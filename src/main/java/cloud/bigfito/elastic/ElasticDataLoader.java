@@ -75,8 +75,8 @@ public class ElasticDataLoader {
             ElasticsearchClient client = new ElasticsearchClient(transport);
 
             createIndex(client);
-            //ingestData(client);
-            //createInferenceEndpoints(client);
+            ingestData(client);
+            createInferenceEndpoints(client);
         }
     }
 
