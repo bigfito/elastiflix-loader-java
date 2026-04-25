@@ -34,7 +34,7 @@ public class ElasticDataLoader {
         // your Elasticsearch terminal when you first started it.
         // -----------------------------------------------------------
         final String username = "elastic";
-        final String password = "3l4st1c2026!.";
+        final String password = "<PASSWORD_HERE>";
 
         BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         credentialsProvider.setCredentials(
