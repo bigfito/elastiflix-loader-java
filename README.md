@@ -8,22 +8,25 @@ A command-line data loader that bulk-ingests a ~30 K movie dataset into an Elast
 |---|---|
 | Java | 21+ |
 | Maven | 3.8+ |
-| Elasticsearch | 9.x (local cluster at `https://localhost:9200`) |
+| Elasticsearch | 9.x |
 
-The loader is designed to run against the 4-node Docker Compose cluster defined in the sibling `../docker-compose/` directory. Start that cluster first.
+The loader connects to any Elasticsearch cluster — local, Docker, or Elastic Cloud — via environment variables.
 
 ## Configuration
 
-Before running, open `ElasticDataLoader.java` and update the credentials to match your cluster:
+Set the following environment variables before running:
 
-```java
-final String username = "elastic";
-final String password = "your-password-here"; // line 37
+| Variable | Description |
+|---|---|
+| `ELASTIC_ENDPOINT` | Full URL of your Elasticsearch cluster (e.g. `https://localhost:9200` or your Cloud endpoint) |
+| `APIKEY` | Elasticsearch API key |
+
+```bash
+export ELASTIC_ENDPOINT="https://your-cluster-url"
+export APIKEY="your-api-key-here"
 ```
 
-The password must match the `ELASTIC_PASSWORD` set in `../docker-compose/.env`.
-
-> **Note:** The SSL context trusts all certificates and disables hostname verification. This is intentional for the local dev cluster — do not use this configuration in production.
+> **Note:** The SSL context trusts all certificates and disables hostname verification. This is intentional for local dev — do not use this configuration in production.
 
 ## Running
 
@@ -31,15 +34,38 @@ The password must match the `ELASTIC_PASSWORD` set in `../docker-compose/.env`.
 mvn exec:java
 ```
 
-On first run the loader will:
-1. Verify cluster health and print the cluster name and node count.
-2. Create the `elastiflix-movies` index (skipped if it already exists).
-3. Stream and bulk-ingest all movies in batches of 500, printing progress every batch.
+By default, only index creation is active. To run the full setup, uncomment the relevant method calls in `ElasticDataLoader.java` (lines 78–79):
 
-Expected output:
+```java
+createIndex(client);
+//ingestData(client);
+//createInferenceEndpoints(client);
 ```
-Cluster name:     my-cluster
-Number of nodes:  4
+
+The three operations are independent and can be enabled selectively:
+
+| Method | What it does | Default |
+|---|---|---|
+| `createIndex()` | Creates the `elastiflix-movies` index from `schema.json` (skipped if it already exists) | **Enabled** |
+| `ingestData()` | Bulk-ingests all movies in batches of 500, printing progress every batch | Commented out |
+| `createInferenceEndpoints()` | Creates the three ML inference endpoints (skipped if they already exist) | Commented out |
+
+### Recommended setup order
+
+1. Create inference endpoints first (they are referenced by the index schema).
+2. Create the index.
+3. Ingest data.
+
+### Expected output (full run)
+
+```
+Connecting to Elasticsearch at https://your-cluster-url
+Creating inference endpoint elastiflix-e5 (TextEmbedding)...
+Inference endpoint elastiflix-e5 created successfully.
+Creating inference endpoint elastiflix-elser (SparseEmbedding)...
+Inference endpoint elastiflix-elser created successfully.
+Creating inference endpoint elastiflix-rerank (Rerank)...
+Inference endpoint elastiflix-rerank created successfully.
 Creating index elastiflix-movies...
 Index elastiflix-movies created successfully.
 Ingesting data into elastiflix-movies...
@@ -59,18 +85,20 @@ The `elastiflix-movies` index is defined in `src/main/resources/cloud/bigfito/el
   - `plot_e5` — dense embeddings via `multilingual-e5-small` (best for multilingual semantic queries)
   - Both are populated automatically from the `plot` field via `copy_to`.
 
-Inference endpoint configurations used to create the ML models are in:
+## Inference Endpoints
+
+Three ML inference endpoints are created by `createInferenceEndpoints()`. Their configurations live in:
 
 ```
 src/main/resources/cloud/bigfito/elastic/config/
-├── inference_e5.json       # text_embedding — multilingual-e5-small, adaptive 1–32 allocations
-├── inference_elser.json    # sparse_embedding — elser_model_2, adaptive 2–32 allocations
-└── inference_rerank.json   # rerank — rerank-v1, 2 allocations
+├── inference_e5.json       # elastiflix-e5 — text_embedding, multilingual-e5-small, adaptive 1–32 allocations
+├── inference_elser.json    # elastiflix-elser — sparse_embedding, elser_model_2, adaptive 2–32 allocations
+└── inference_rerank.json   # elastiflix-rerank — rerank, rerank-v1, 2 allocations
 ```
 
 ## Dataset
 
-The movie dataset (`movies.zip`, ~29 MB) is bundled inside the project and unzipped at runtime from the classpath. It contains JSON objects with fields matching the index schema above.
+The movie dataset (`movies.json`, ~30 K movies) is bundled inside the project and loaded at runtime from the classpath. It contains JSON objects with fields matching the index schema above.
 
 ## Project Structure
 
@@ -85,7 +113,7 @@ src/main/resources/cloud/bigfito/elastic/
 │   ├── inference_elser.json
 │   └── inference_rerank.json
 └── movies/
-    └── movies.zip                  # Bundled dataset (~30K movies)
+    └── movies.json                 # Bundled dataset (~30K movies)
 ```
 
 ## Dependencies
