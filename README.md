@@ -34,12 +34,12 @@ export APIKEY="your-api-key-here"
 mvn exec:java
 ```
 
-By default, only index creation is active. To run the full setup, uncomment the relevant method calls in `ElasticDataLoader.java` (lines 78–79):
+By default, all operations (index creation, data ingestion, and inference endpoint creation) are active in `ElasticDataLoader.java` (lines 75–77):
 
 ```java
 createIndex(client);
-//ingestData(client);
-//createInferenceEndpoints(client);
+ingestData(client);
+createInferenceEndpoints(client);
 ```
 
 The three operations are independent and can be enabled selectively:
@@ -47,8 +47,8 @@ The three operations are independent and can be enabled selectively:
 | Method | What it does | Default |
 |---|---|---|
 | `createIndex()` | Creates the `elastiflix-movies` index from `schema.json` (skipped if it already exists) | **Enabled** |
-| `ingestData()` | Bulk-ingests all movies in batches of 500, printing progress every batch | Commented out |
-| `createInferenceEndpoints()` | Creates the three ML inference endpoints (skipped if they already exist) | Commented out |
+| `ingestData()` | Bulk-ingests all movies in batches of 500, printing progress every batch | **Enabled** |
+| `createInferenceEndpoints()` | Creates the three ML inference endpoints (skipped if they already exist) | **Enabled** |
 
 ### Recommended setup order
 
