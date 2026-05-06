@@ -19,11 +19,11 @@ Set the following environment variables before running:
 | Variable | Description |
 |---|---|
 | `ELASTIC_ENDPOINT` | Full URL of your Elasticsearch cluster (e.g. `https://localhost:9200` or your Cloud endpoint) |
-| `APIKEY` | Elasticsearch API key |
+| `API_KEY` | Elasticsearch API key |
 
 ```bash
 export ELASTIC_ENDPOINT="https://your-cluster-url"
-export APIKEY="your-api-key-here"
+export API_KEY="your-api-key-here"
 ```
 
 > **Note:** The SSL context trusts all certificates and disables hostname verification. This is intentional for local dev — do not use this configuration in production.
@@ -34,12 +34,12 @@ export APIKEY="your-api-key-here"
 mvn exec:java
 ```
 
-By default, all operations (index creation, data ingestion, and inference endpoint creation) are active in `ElasticDataLoader.java` (lines 75–77):
+By default, all operations (inference endpoint creation, index creation, and data ingestion) are active in `ElasticDataLoader.java` (lines 83–85):
 
 ```java
+createInferenceEndpoints(client);
 createIndex(client);
 ingestData(client);
-createInferenceEndpoints(client);
 ```
 
 The three operations are independent and can be enabled selectively:
@@ -60,12 +60,12 @@ The three operations are independent and can be enabled selectively:
 
 ```
 Connecting to Elasticsearch at https://your-cluster-url
-Creating inference endpoint elastiflix-e5 (TextEmbedding)...
-Inference endpoint elastiflix-e5 created successfully.
-Creating inference endpoint elastiflix-elser (SparseEmbedding)...
-Inference endpoint elastiflix-elser created successfully.
-Creating inference endpoint elastiflix-rerank (Rerank)...
-Inference endpoint elastiflix-rerank created successfully.
+Creating inference endpoint e5 (TextEmbedding)...
+Inference endpoint e5 created successfully.
+Creating inference endpoint elser (SparseEmbedding)...
+Inference endpoint elser created successfully.
+Creating inference endpoint rerank (Rerank)...
+Inference endpoint rerank created successfully.
 Creating index elastiflix-movies...
 Index elastiflix-movies created successfully.
 Ingesting data into elastiflix-movies...
@@ -91,9 +91,9 @@ Three ML inference endpoints are created by `createInferenceEndpoints()`. Their 
 
 ```
 src/main/resources/cloud/bigfito/elastic/config/
-├── inference_e5.json       # elastiflix-e5 — text_embedding, multilingual-e5-small, adaptive 1–32 allocations
-├── inference_elser.json    # elastiflix-elser — sparse_embedding, elser_model_2, adaptive 2–32 allocations
-└── inference_rerank.json   # elastiflix-rerank — rerank, rerank-v1, 2 allocations
+├── inference_e5.json       # e5 — text_embedding, multilingual-e5-small, adaptive 1–32 allocations
+├── inference_elser.json    # elser — sparse_embedding, elser_model_2, adaptive 2–32 allocations
+└── inference_rerank.json   # rerank — rerank, rerank-v1, 2 allocations
 ```
 
 ## Dataset

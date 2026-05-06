@@ -38,7 +38,7 @@ public class ElasticDataLoader {
             throw new IllegalStateException("Environment variable ELASTIC_ENDPOINT is not set.");
         }
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("Environment variable APIKEY is not set.");
+            throw new IllegalStateException("Environment variable API_KEY is not set.");
         }
 
         System.out.println("Connecting to Elasticsearch at " + serverUrl);
@@ -173,7 +173,7 @@ public class ElasticDataLoader {
     }
 
     private static void createInferenceEndpoints(ElasticsearchClient client) throws Exception {
-        String[] endpointIds = {"elastiflix-e5", "elastiflix-elser", "elastiflix-rerank"};
+        String[] endpointIds = {"e5", "elser", "rerank"};
         TaskType[] taskTypes = {TaskType.TextEmbedding, TaskType.SparseEmbedding, TaskType.Rerank};
         String[] configFiles = {
                 "/cloud/bigfito/elastic/config/inference_e5.json",
