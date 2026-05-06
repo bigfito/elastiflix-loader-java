@@ -30,8 +30,16 @@ public class ElasticDataLoader {
 
     public static void main(String[] args) throws Exception {
 
+        // Configure the following environment variables in your intellij idea configuration settings
         String serverUrl = System.getenv("ELASTIC_ENDPOINT");
-        String apiKey = System.getenv("APIKEY");
+        String apiKey = System.getenv("API_KEY");
+
+        if (serverUrl == null || serverUrl.isBlank()) {
+            throw new IllegalStateException("Environment variable ELASTIC_ENDPOINT is not set.");
+        }
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("Environment variable APIKEY is not set.");
+        }
 
         System.out.println("Connecting to Elasticsearch at " + serverUrl);
 
@@ -75,6 +83,8 @@ public class ElasticDataLoader {
             createIndex(client);
             ingestData(client);
             createInferenceEndpoints(client);
+
+            System.out.println("Data loading complete!");
         }
     }
 
