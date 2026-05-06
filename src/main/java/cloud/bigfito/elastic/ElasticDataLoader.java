@@ -80,9 +80,9 @@ public class ElasticDataLoader {
 
             ElasticsearchClient client = new ElasticsearchClient(transport);
 
+            createInferenceEndpoints(client);
             createIndex(client);
             ingestData(client);
-            createInferenceEndpoints(client);
 
             System.out.println("Data loading complete!");
         }
