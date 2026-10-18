@@ -1,6 +1,6 @@
 # Elastiflix Loader — Java
 
-A command-line data loader that bulk-ingests a ~30 K movie dataset into an Elasticsearch cluster and creates the `elastiflix-movies` index with semantic search capabilities powered by ELSER and multilingual-E5 embeddings.
+A command-line data loader that bulk-ingests a 6,899-movie dataset into an Elasticsearch cluster and creates the `elastiflix-movies` index with semantic search capabilities powered by ELSER and multilingual-E5 embeddings.
 
 ## Prerequisites
 
@@ -72,7 +72,7 @@ Ingesting data into elastiflix-movies...
 Indexed 500 movies...
 Indexed 1000 movies...
 ...
-Successfully indexed 30361 movies.
+Successfully indexed 6899 movies.
 ```
 
 ## Index Schema
@@ -98,7 +98,7 @@ src/main/resources/cloud/bigfito/elastic/config/
 
 ## Dataset
 
-The movie dataset (`movies.json`, ~30 K movies) is bundled inside the project and loaded at runtime from the classpath. It contains JSON objects with fields matching the index schema above.
+The movie dataset (`movies.json`, 6,899 movies) is bundled inside the project and loaded at runtime from the classpath. Every record has an English `plot` field. It contains JSON objects with fields matching the index schema above.
 
 ## Project Structure
 
@@ -113,7 +113,7 @@ src/main/resources/cloud/bigfito/elastic/
 │   ├── inference_elser.json
 │   └── inference_rerank.json
 └── movies/
-    └── movies.json                 # Bundled dataset (~30K movies)
+    └── movies.json                 # Bundled dataset (6,899 movies)
 ```
 
 ## Dependencies
