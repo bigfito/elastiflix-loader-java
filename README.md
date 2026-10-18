@@ -98,7 +98,7 @@ src/main/resources/cloud/bigfito/elastic/config/
 
 ## Dataset
 
-The movie dataset (`movies.json`, 6,899 movies) is bundled inside the project and loaded at runtime from the classpath. Every record has an English `plot` field. It contains JSON objects with fields matching the index schema above.
+The movie dataset (6,899 movies) is bundled as seven classpath files, `movies_01.json` through `movies_07.json`, and loaded at runtime in that order. `movies_01.json` through `movies_06.json` contain 986 records each, and `movies_07.json` contains the last 983. Every record has an English `plot` field. Each file is a JSON array of objects with fields matching the index schema above.
 
 ## Project Structure
 
@@ -113,7 +113,13 @@ src/main/resources/cloud/bigfito/elastic/
 │   ├── inference_elser.json
 │   └── inference_rerank.json
 └── movies/
-    └── movies.json                 # Bundled dataset (6,899 movies)
+    ├── movies_01.json              # 986 movies
+    ├── movies_02.json              # 986 movies
+    ├── movies_03.json              # 986 movies
+    ├── movies_04.json              # 986 movies
+    ├── movies_05.json              # 986 movies
+    ├── movies_06.json              # 986 movies
+    └── movies_07.json              # 983 movies
 ```
 
 ## Dependencies

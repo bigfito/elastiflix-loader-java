@@ -92,58 +92,61 @@ public class ElasticDataLoader {
         String indexName = "elastiflix-movies";
         System.out.println("Ingesting data into " + indexName + "...");
 
-        try (InputStream moviesStream = ElasticDataLoader.class.getResourceAsStream("/cloud/bigfito/elastic/movies/movies.json")) {
-            if (moviesStream == null) {
-                throw new RuntimeException("Could not find movies.json");
-            }
+        JacksonJsonpMapper mapper = (JacksonJsonpMapper) client._transport().jsonpMapper();
+        List<BulkOperation> operations = new ArrayList<>();
+        int count = 0;
 
-            JacksonJsonpMapper mapper = (JacksonJsonpMapper) client._transport().jsonpMapper();
-            JsonParser parser = mapper.jsonProvider().createParser(moviesStream);
-
-            // Consume the opening bracket of the array
-            parser.next();
-
-            List<BulkOperation> operations = new ArrayList<>();
-            int count = 0;
-
-            while (parser.hasNext()) {
-                JsonParser.Event event = parser.next();
-                if (event == JsonParser.Event.END_ARRAY) {
-                    break;
-                }
-                
-                // We are at START_OBJECT
-                JsonValue movieValue = parser.getValue();
-                JsonData movie = JsonData.of(movieValue);
-                JsonValue idValue = movieValue.asJsonObject().get("id");
-                String id = idValue.toString();
-
-                // Remove potential quotes from JsonString.toString()
-                if (id.startsWith("\"") && id.endsWith("\"")) {
-                    id = id.substring(1, id.length() - 1);
+        for (int fileNumber = 1; fileNumber <= 7; fileNumber++) {
+            String movieFile = "/cloud/bigfito/elastic/movies/movies_%02d.json".formatted(fileNumber);
+            try (InputStream moviesStream = ElasticDataLoader.class.getResourceAsStream(movieFile)) {
+                if (moviesStream == null) {
+                    throw new RuntimeException("Could not find " + movieFile);
                 }
 
-                String finalId = id;
-                operations.add(new BulkOperation.Builder()
-                        .index(idx -> idx
-                                .index(indexName)
-                                .id(finalId)
-                                .document(movie)
-                        ).build());
+                JsonParser parser = mapper.jsonProvider().createParser(moviesStream);
 
-                count++;
-                if (count % 500 == 0) {
-                    client.bulk(b -> b.index(indexName).operations(operations));
-                    operations.clear();
-                    System.out.println("Indexed " + count + " movies...");
+                // Consume the opening bracket of the array
+                parser.next();
+
+                while (parser.hasNext()) {
+                    JsonParser.Event event = parser.next();
+                    if (event == JsonParser.Event.END_ARRAY) {
+                        break;
+                    }
+
+                    // We are at START_OBJECT
+                    JsonValue movieValue = parser.getValue();
+                    JsonData movie = JsonData.of(movieValue);
+                    JsonValue idValue = movieValue.asJsonObject().get("id");
+                    String id = idValue.toString();
+
+                    // Remove potential quotes from JsonString.toString()
+                    if (id.startsWith("\"") && id.endsWith("\"")) {
+                        id = id.substring(1, id.length() - 1);
+                    }
+
+                    String finalId = id;
+                    operations.add(new BulkOperation.Builder()
+                            .index(idx -> idx
+                                    .index(indexName)
+                                    .id(finalId)
+                                    .document(movie)
+                            ).build());
+
+                    count++;
+                    if (count % 500 == 0) {
+                        client.bulk(b -> b.index(indexName).operations(operations));
+                        operations.clear();
+                        System.out.println("Indexed " + count + " movies...");
+                    }
                 }
             }
-
-            if (!operations.isEmpty()) {
-                client.bulk(b -> b.index(indexName).operations(operations));
-            }
-            System.out.println("Successfully indexed " + count + " movies.");
         }
+
+        if (!operations.isEmpty()) {
+            client.bulk(b -> b.index(indexName).operations(operations));
+        }
+        System.out.println("Successfully indexed " + count + " movies.");
     }
 
     private static void createIndex(ElasticsearchClient client) throws Exception {
